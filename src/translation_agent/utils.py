@@ -21,7 +21,7 @@ MAX_TOKENS_PER_CHUNK = (
 def get_completion(
     prompt: str,
     system_message: str = "You are a helpful assistant.",
-    model: str = "gpt-4-turbo",
+    model: str = "deepseek-chat",
     temperature: float = 0.3,
     json_mode: bool = False,
 ) -> Union[str, dict]:
@@ -33,7 +33,7 @@ def get_completion(
         system_message (str, optional): The system message to set the context for the assistant.
             Defaults to "You are a helpful assistant.".
         model (str, optional): The name of the OpenAI model to use for generating the completion.
-            Defaults to "gpt-4-turbo".
+            Defaults to "deepseek-chat".
         temperature (float, optional): The sampling temperature for controlling the randomness of the generated text.
             Defaults to 0.3.
         json_mode (bool, optional): Whether to return the response in JSON format.
@@ -189,7 +189,7 @@ def one_chunk_improve_translation(
     reflection: str,
 ) -> str:
     """
-    Use the reflection to improve the translation, treating the entire text as one chunk.
+    使用反射来改进翻译，将整个文本视为一个块。
 
     Args:
         source_lang (str): The source language of the text.
@@ -602,7 +602,7 @@ def multichunk_translation(
 
 def calculate_chunk_size(token_count: int, token_limit: int) -> int:
     """
-    Calculate the chunk size based on the token count and token limit.
+    根据令牌计数和令牌限制计算块大小。
 
     Args:
         token_count (int): The total number of tokens.
@@ -612,12 +612,12 @@ def calculate_chunk_size(token_count: int, token_limit: int) -> int:
         int: The calculated chunk size.
 
     Description:
-        This function calculates the chunk size based on the given token count and token limit.
-        If the token count is less than or equal to the token limit, the function returns the token count as the chunk size.
-        Otherwise, it calculates the number of chunks needed to accommodate all the tokens within the token limit.
-        The chunk size is determined by dividing the token limit by the number of chunks.
-        If there are remaining tokens after dividing the token count by the token limit,
-        the chunk size is adjusted by adding the remaining tokens divided by the number of chunks.
+        此函数根据给定的令牌计数和令牌限制计算块大小。
+        如果令牌计数小于或等于令牌限制，则函数将令牌计数作为块大小返回。
+        否则，它会计算在令牌限制内容纳所有令牌所需的块数。
+        块大小通过将令牌限制除以块数来确定。
+        如果令牌计数除以令牌限制后还有剩余的令牌，
+        块大小通过添加剩余的标记除以块的数量来调整。
 
     Example:
         >>> calculate_chunk_size(1000, 500)
@@ -673,7 +673,7 @@ def translate(
         ic(token_size)
 
         text_splitter = RecursiveCharacterTextSplitter.from_tiktoken_encoder(
-            model_name="gpt-4",
+            model_name="deepseek-chat",
             chunk_size=token_size,
             chunk_overlap=0,
         )
