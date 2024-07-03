@@ -85,12 +85,11 @@ def one_chunk_initial_translation(
         str: The translated text.
     """
 
-    system_message = f"You are an expert linguist, specializing in translation from {source_lang} to {target_lang}."
+    system_message = f"你是语言专家，擅长将{source_lang}翻译为{target_lang}"
 
-    translation_prompt = f"""This is an {source_lang} to {target_lang} translation, please provide the {target_lang} translation for this text. \
-Do not provide any explanations or text apart from the translation.
-{source_lang}: {source_text}
-
+    translation_prompt = f"""下面三重引号(''')中的文本是{source_lang}，你需要将它翻译为{target_lang}。
+除了翻译之外，不要提供任何解释或文本。
+{source_lang}:'''{source_text}'''
 {target_lang}:"""
 
     prompt = translation_prompt.format(source_text=source_text)
@@ -121,37 +120,18 @@ def one_chunk_reflect_on_translation(
         str: The LLM's reflection on the translation, providing constructive criticism and suggestions for improvement.
     """
 
-    system_message = f"You are an expert linguist specializing in translation from {source_lang} to {target_lang}. \
-You will be provided with a source text and its translation and your goal is to improve the translation."
+    system_message = f"你是语言专家，擅长将{source_lang}翻译为{target_lang}。 \
+您将获得源文本及其翻译，您的目标是改进翻译。"
 
     if country != "":
-        reflection_prompt = f"""Your task is to carefully read a source text and a translation from {source_lang} to {target_lang}, and then give constructive criticism and helpful suggestions to improve the translation. \
-The final style and tone of the translation should match the style of {target_lang} colloquially spoken in {country}.
-
-The source text and initial translation, delimited by XML tags <SOURCE_TEXT></SOURCE_TEXT> and <TRANSLATION></TRANSLATION>, are as follows:
-
-<SOURCE_TEXT>
-{source_text}
-</SOURCE_TEXT>
-
-<TRANSLATION>
-{translation_1}
-</TRANSLATION>
-
-When writing suggestions, pay attention to whether there are ways to improve the translation's \n\
-(i) accuracy (by correcting errors of addition, mistranslation, omission, or untranslated text),\n\
-(ii) fluency (by applying {target_lang} grammar, spelling and punctuation rules, and ensuring there are no unnecessary repetitions),\n\
-(iii) style (by ensuring the translations reflect the style of the source text and takes into account any cultural context),\n\
-(iv) terminology (by ensuring terminology use is consistent and reflects the source text domain; and by only ensuring you use equivalent idioms {target_lang}).\n\
-
-Write a list of specific, helpful and constructive suggestions for improving the translation.
-Each suggestion should address one specific part of the translation.
-Output only the suggestions and nothing else."""
-
+        country_prompt = f"译文的最终风格和语气应与{target_lang}在{country}口语中的风格相匹配。"
     else:
-        reflection_prompt = f"""Your task is to carefully read a source text and a translation from {source_lang} to {target_lang}, and then give constructive criticism and helpful suggestions to improve the translation. \
+        country_prompt = ""
+        
+    reflection_prompt = f"""你的任务是仔细阅读一篇源文本和一篇从{source_lang}到{target_lang}的译文，然后给出建设性的批评和有用的建议来改进译文。\
+{country_prompt}
 
-The source text and initial translation, delimited by XML tags <SOURCE_TEXT></SOURCE_TEXT> and <TRANSLATION></TRANSLATION>, are as follows:
+由XML标记<SOURCE_TEXT></SOURCE_TEXT>和<TRANSLATION></TRANSLATION>分隔的源文本和初始翻译如下：
 
 <SOURCE_TEXT>
 {source_text}
@@ -161,15 +141,16 @@ The source text and initial translation, delimited by XML tags <SOURCE_TEXT></SO
 {translation_1}
 </TRANSLATION>
 
-When writing suggestions, pay attention to whether there are ways to improve the translation's \n\
-(i) accuracy (by correcting errors of addition, mistranslation, omission, or untranslated text),\n\
-(ii) fluency (by applying {target_lang} grammar, spelling and punctuation rules, and ensuring there are no unnecessary repetitions),\n\
-(iii) style (by ensuring the translations reflect the style of the source text and takes into account any cultural context),\n\
-(iv) terminology (by ensuring terminology use is consistent and reflects the source text domain; and by only ensuring you use equivalent idioms {target_lang}).\n\
+写建议时，注意是否有办法提高译文的 \n\
+1. 准确性(是否有添加、误译、遗漏或未翻译文本的错误),\n\
+2. 流畅(应用{target_lang}语法、拼写和标点规则，并避免不必要的重复,\n\
+3. 风格(翻译应反映源文本的风格并考虑文化背景),\n\
+4. 术语(通过确保术语使用一致并反映源文本域；并确保使用{target_lang}的等效成语)。\n\
 
-Write a list of specific, helpful and constructive suggestions for improving the translation.
-Each suggestion should address one specific part of the translation.
-Output only the suggestions and nothing else."""
+写一份具体的、有用的和建设性的建议清单，以改进翻译。
+每个建议都应针对翻译的一个特定部分。
+只输出建议，不输出其他内容。"""
+
 
     prompt = reflection_prompt.format(
         source_lang=source_lang,
@@ -202,13 +183,11 @@ def one_chunk_improve_translation(
         str: The improved translation based on the expert suggestions.
     """
 
-    system_message = f"You are an expert linguist, specializing in translation editing from {source_lang} to {target_lang}."
+    system_message = f"你是语言专家，从事{source_lang}到{target_lang}的翻译和编辑工作"
 
-    prompt = f"""Your task is to carefully read, then edit, a translation from {source_lang} to {target_lang}, taking into
-account a list of expert suggestions and constructive criticisms.
+    prompt = f"""你的任务是仔细阅读源文本、初始翻译和语言学专家家建议，充分考虑语言学专家家建议，然后重新编辑初始翻译，输出最终翻译。
 
-The source text, the initial translation, and the expert linguist suggestions are delimited by XML tags <SOURCE_TEXT></SOURCE_TEXT>, <TRANSLATION></TRANSLATION> and <EXPERT_SUGGESTIONS></EXPERT_SUGGESTIONS> \
-as follows:
+源文本、初始翻译和语言学专家家建议由XML标记<SOURCE_TEXT></SOURCE_TEXT>、<TRANSLATION></TRANSLATION>和<EXPERT_SUGGESTIONS></EXPERT_SUGGESTIONS>分隔，内容如下：
 
 <SOURCE_TEXT>
 {source_text}
@@ -222,15 +201,8 @@ as follows:
 {reflection}
 </EXPERT_SUGGESTIONS>
 
-Please take into account the expert suggestions when editing the translation. Edit the translation by ensuring:
 
-(i) accuracy (by correcting errors of addition, mistranslation, omission, or untranslated text),
-(ii) fluency (by applying {target_lang} grammar, spelling and punctuation rules and ensuring there are no unnecessary repetitions), \
-(iii) style (by ensuring the translations reflect the style of the source text)
-(iv) terminology (inappropriate for context, inconsistent use), or
-(v) other errors.
-
-Output only the new translation and nothing else."""
+只输出新翻译，没有其他内容。"""
 
     translation_2 = get_completion(prompt, system_message)
 
@@ -258,10 +230,11 @@ def one_chunk_translate_text(
     translation_1 = one_chunk_initial_translation(
         source_lang, target_lang, source_text
     )
-
+    ic(f"translation_1:\n\n{translation_1}")
     reflection = one_chunk_reflect_on_translation(
         source_lang, target_lang, source_text, translation_1, country
     )
+    ic(f"reflection:\n\n{reflection}")
     translation_2 = one_chunk_improve_translation(
         source_lang, target_lang, source_text, translation_1, reflection
     )
