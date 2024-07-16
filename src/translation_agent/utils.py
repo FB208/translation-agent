@@ -13,7 +13,7 @@ load_dotenv()  # read local .env file
 client = openai.OpenAI(api_key=os.getenv("OPENAI_API_KEY"))
 
 MAX_TOKENS_PER_CHUNK = (
-    1000  # if text is more than this many tokens, we'll break it up into
+    500  # if text is more than this many tokens, we'll break it up into
 )
 # discrete chunks to translate one chunk at a time
 
@@ -21,7 +21,7 @@ MAX_TOKENS_PER_CHUNK = (
 def get_completion(
     prompt: str,
     system_message: str = "You are a helpful assistant.",
-    model: str = "deepseek-chat",
+    model: str = "gpt-3.5-turbo",
     temperature: float = 0.3,
     json_mode: bool = False,
 ) -> Union[str, dict]:
@@ -33,7 +33,7 @@ def get_completion(
         system_message (str, optional): The system message to set the context for the assistant.
             Defaults to "You are a helpful assistant.".
         model (str, optional): The name of the OpenAI model to use for generating the completion.
-            Defaults to "deepseek-chat".
+            Defaults to "gpt-3.5-turbo".
         temperature (float, optional): The sampling temperature for controlling the randomness of the generated text.
             Defaults to 0.3.
         json_mode (bool, optional): Whether to return the response in JSON format.
@@ -121,7 +121,7 @@ def one_chunk_reflect_on_translation(
     """
 
     system_message = f"你是语言专家，擅长将{source_lang}翻译为{target_lang}。 \
-您将获得源文本及其翻译，您的目标是改进翻译。"
+你将获得源文本及其翻译，您的目标是改进翻译。"
 
     if country != "":
         country_prompt = f"译文的最终风格和语气应与{target_lang}在{country}口语中的风格相匹配。"
@@ -141,7 +141,7 @@ def one_chunk_reflect_on_translation(
 {translation_1}
 </TRANSLATION>
 
-写建议时，注意是否有办法提高译文的 \n\
+写建议时，注意是否有办法根据以下几点提高译文质量 \n\
 1. 准确性(是否有添加、误译、遗漏或未翻译文本的错误),\n\
 2. 流畅(应用{target_lang}语法、拼写和标点规则，并避免不必要的重复,\n\
 3. 风格(翻译应反映源文本的风格并考虑文化背景),\n\
@@ -157,6 +157,7 @@ def one_chunk_reflect_on_translation(
         target_lang=target_lang,
         source_text=source_text,
         translation_1=translation_1,
+        country_prompt=country_prompt,
     )
     reflection = get_completion(prompt, system_message=system_message)
     return reflection
@@ -183,7 +184,7 @@ def one_chunk_improve_translation(
         str: The improved translation based on the expert suggestions.
     """
 
-    system_message = f"你是语言专家，从事{source_lang}到{target_lang}的翻译和编辑工作"
+    system_message = f"你是语言专家，从事{source_lang}到{target_lang}的翻译和编辑工作。"
 
     prompt = f"""你的任务是仔细阅读源文本、初始翻译和语言学专家家建议，充分考虑语言学专家家建议，然后重新编辑初始翻译，输出最终翻译。
 
@@ -251,7 +252,7 @@ def num_tokens_in_string(
     Args:
         str (str): The input string to be tokenized.
         encoding_name (str, optional): The name of the encoding to use. Defaults to "cl100k_base",
-            which is the most commonly used encoder (used by GPT-4).
+            which is the most commonly used encoder (used by gpt-3.5-turbo).
 
     Returns:
         int: The number of tokens in the input string.
@@ -271,53 +272,49 @@ def multichunk_initial_translation(
     source_lang: str, target_lang: str, source_text_chunks: List[str]
 ) -> List[str]:
     """
-    Translate a text in multiple chunks from the source language to the target language.
+    将文本从源语言翻译成目标语言.
 
     Args:
-        source_lang (str): The source language of the text.
-        target_lang (str): The target language for translation.
-        source_text_chunks (List[str]): A list of text chunks to be translated.
+        source_lang（str）：文本的源语言。
+        target_lang（str）：翻译的目标语言。
+        source_text_chunks（List[str]）：要翻译的文本块列表。
 
     Returns:
-        List[str]: A list of translated text chunks.
+        list[str]：翻译文本块的列表。
     """
 
-    system_message = f"You are an expert linguist, specializing in translation from {source_lang} to {target_lang}."
+    system_message = f"你是语言专家，擅长将{source_lang}翻译为{target_lang}。"
 
-    translation_prompt = """Your task is provide a professional translation from {source_lang} to {target_lang} of PART of a text.
+    translation_prompt = """您的任务是将提供的文本中<TRANSLATE_THIS></TRANSLATE_THIS>的内容，从{source_lang}翻译为{target_lang}。
 
-The source text is below, delimited by XML tags <SOURCE_TEXT> and </SOURCE_TEXT>. Translate only the part within the source text
-delimited by <TRANSLATE_THIS> and </TRANSLATE_THIS>. You can use the rest of the source text as context, but do not translate any
-of the other text. Do not output anything other than the translation of the indicated part of the text.
+我会给你提供三段文本，分别由XML标记<PREV></PREV>、<TRANSLATE_THIS></TRANSLATE_THIS>、<NEXT></NEXT>包裹，<TRANSLATE_THIS></TRANSLATE_THIS>包裹的是要翻译的文本，<PREV></PREV>包裹的是文本的前文，<NEXT></NEXT>包裹的是文本的后文.
+内容如下：
+<PREV>{prev}</PREV>
+<TRANSLATE_THIS>{translate_this}</TRANSLATE_THIS>
+<NEXT>{next}</NEXT>
 
-<SOURCE_TEXT>
-{tagged_text}
-</SOURCE_TEXT>
+你可以参考PREV和NEXT中的前后文，但不要翻译任何前后文。
+强调一遍，你仅翻译XML标记<TRANSLATE_THIS></TRANSLATE_THIS>中的内容，除此之外不要输出任何内容。
 
-To reiterate, you should translate only this part of the text, shown here again between <TRANSLATE_THIS> and </TRANSLATE_THIS>:
-<TRANSLATE_THIS>
-{chunk_to_translate}
-</TRANSLATE_THIS>
-
-Output only the translation of the portion you are asked to translate, and nothing else.
 """
-
+    ic(len(source_text_chunks))
     translation_chunks = []
     for i in range(len(source_text_chunks)):
         # Will translate chunk i
-        tagged_text = (
-            "".join(source_text_chunks[0:i])
-            + "<TRANSLATE_THIS>"
-            + source_text_chunks[i]
-            + "</TRANSLATE_THIS>"
-            + "".join(source_text_chunks[i + 1 :])
-        )
+        # tagged_text = (
+        #     "".join(source_text_chunks[0:i])
+        #     + "<TRANSLATE_THIS>"
+        #     + source_text_chunks[i]
+        #     + "</TRANSLATE_THIS>"
+        #     + "".join(source_text_chunks[i + 1 :])
+        # )
 
         prompt = translation_prompt.format(
             source_lang=source_lang,
             target_lang=target_lang,
-            tagged_text=tagged_text,
-            chunk_to_translate=source_text_chunks[i],
+            prev=source_text_chunks[i - 1] if i > 0 else "",
+            next=source_text_chunks[i + 1] if i < len(source_text_chunks) - 1 else "",
+            translate_this=source_text_chunks[i],
         )
 
         translation = get_completion(prompt, system_message=system_message)
@@ -334,112 +331,67 @@ def multichunk_reflect_on_translation(
     country: str = "",
 ) -> List[str]:
     """
-    Provides constructive criticism and suggestions for improving a partial translation.
+    为改进部分译文提供建设性的批评和建议。
 
     Args:
-        source_lang (str): The source language of the text.
-        target_lang (str): The target language of the translation.
-        source_text_chunks (List[str]): The source text divided into chunks.
-        translation_1_chunks (List[str]): The translated chunks corresponding to the source text chunks.
-        country (str): Country specified for target language.
+        source_lang（str）：文本的源语言。
+        target_lang（str）：译文的目标语言。
+        source_text_chunks（List[str]）：分成块的源文本。
+        translation_1_chunks（List[str]）：源文本块对应的翻译块。
+        country（str）：为目标语言指定的国家。
 
     Returns:
-        List[str]: A list of reflections containing suggestions for improving each translated chunk.
+        List[str]: 包含改进每个翻译块的建议的反射列表。
     """
 
-    system_message = f"You are an expert linguist specializing in translation from {source_lang} to {target_lang}. \
-You will be provided with a source text and its translation and your goal is to improve the translation."
-
+    system_message = f"你是一位专业的语言学家，擅长将{source_lang}翻译成{target_lang}。 \
+你将获得源文本及其翻译，你的目标是改进翻译。"
     if country != "":
-        reflection_prompt = """Your task is to carefully read a source text and part of a translation of that text from {source_lang} to {target_lang}, and then give constructive criticism and helpful suggestions for improving the translation.
-The final style and tone of the translation should match the style of {target_lang} colloquially spoken in {country}.
-
-The source text is below, delimited by XML tags <SOURCE_TEXT> and </SOURCE_TEXT>, and the part that has been translated
-is delimited by <TRANSLATE_THIS> and </TRANSLATE_THIS> within the source text. You can use the rest of the source text
-as context for critiquing the translated part.
-
-<SOURCE_TEXT>
-{tagged_text}
-</SOURCE_TEXT>
-
-To reiterate, only part of the text is being translated, shown here again between <TRANSLATE_THIS> and </TRANSLATE_THIS>:
-<TRANSLATE_THIS>
-{chunk_to_translate}
-</TRANSLATE_THIS>
-
-The translation of the indicated part, delimited below by <TRANSLATION> and </TRANSLATION>, is as follows:
-<TRANSLATION>
-{translation_1_chunk}
-</TRANSLATION>
-
-When writing suggestions, pay attention to whether there are ways to improve the translation's:\n\
-(i) accuracy (by correcting errors of addition, mistranslation, omission, or untranslated text),\n\
-(ii) fluency (by applying {target_lang} grammar, spelling and punctuation rules, and ensuring there are no unnecessary repetitions),\n\
-(iii) style (by ensuring the translations reflect the style of the source text and takes into account any cultural context),\n\
-(iv) terminology (by ensuring terminology use is consistent and reflects the source text domain; and by only ensuring you use equivalent idioms {target_lang}).\n\
-
-Write a list of specific, helpful and constructive suggestions for improving the translation.
-Each suggestion should address one specific part of the translation.
-Output only the suggestions and nothing else."""
-
+        country_prompt = f"译文的最终风格和语气应与{target_lang}在{country}口语中的风格相匹配。"
     else:
-        reflection_prompt = """Your task is to carefully read a source text and part of a translation of that text from {source_lang} to {target_lang}, and then give constructive criticism and helpful suggestions for improving the translation.
+        country_prompt = ""
+    reflection_prompt = """你的任务是仔细阅读一篇源文本和一篇从{{source_lang}}到{{target_lang}}的译文，然后给出建设性的批评和有用的建议来改进译文。
+{country_prompt}
 
-The source text is below, delimited by XML tags <SOURCE_TEXT> and </SOURCE_TEXT>, and the part that has been translated
-is delimited by <TRANSLATE_THIS> and </TRANSLATE_THIS> within the source text. You can use the rest of the source text
-as context for critiquing the translated part.
+我会给你提供四段文本，分别由XML标记<PREV></PREV>、<TRANSLATE_THIS></TRANSLATE_THIS>、<NEXT></NEXT>、<TRANSLATION></TRANSLATION>包裹，<TRANSLATE_THIS></TRANSLATE_THIS>包裹的是要翻译的文本，<TRANSLATION></TRANSLATION>包裹的是翻译后的文本，<PREV></PREV>包裹的是原文的前文，<NEXT></NEXT>包裹的是原文的后文。
+内容如下：
+<PREV>{prev}</PREV>
+<TRANSLATE_THIS>{translate_this}</TRANSLATE_THIS>
+<NEXT>{next}</NEXT>
 
-<SOURCE_TEXT>
-{tagged_text}
-</SOURCE_TEXT>
+<TRANSLATION>{translation}</TRANSLATION>
 
-To reiterate, only part of the text is being translated, shown here again between <TRANSLATE_THIS> and </TRANSLATE_THIS>:
-<TRANSLATE_THIS>
-{chunk_to_translate}
-</TRANSLATE_THIS>
+写建议时，注意是否有办法根据以下几点提高译文质量 \n\
+1. 准确性(是否有添加、误译、遗漏或未翻译文本的错误),\n\
+2. 流畅(应用{{target_lang}}语法、拼写和标点规则，并避免不必要的重复,\n\
+3. 风格(翻译应反映源文本的风格并考虑文化背景),\n\
+4. 术语(通过确保术语使用一致并反映源文本域；并确保使用{{target_lang}}的等效成语)。\n\
 
-The translation of the indicated part, delimited below by <TRANSLATION> and </TRANSLATION>, is as follows:
-<TRANSLATION>
-{translation_1_chunk}
-</TRANSLATION>
+写一份具体的、有用的和建设性的建议清单，以改进翻译。
+每个建议都应针对翻译的一个特定部分。
+只输出建议，不输出其他内容。
+"""
 
-When writing suggestions, pay attention to whether there are ways to improve the translation's:\n\
-(i) accuracy (by correcting errors of addition, mistranslation, omission, or untranslated text),\n\
-(ii) fluency (by applying {target_lang} grammar, spelling and punctuation rules, and ensuring there are no unnecessary repetitions),\n\
-(iii) style (by ensuring the translations reflect the style of the source text and takes into account any cultural context),\n\
-(iv) terminology (by ensuring terminology use is consistent and reflects the source text domain; and by only ensuring you use equivalent idioms {target_lang}).\n\
-
-Write a list of specific, helpful and constructive suggestions for improving the translation.
-Each suggestion should address one specific part of the translation.
-Output only the suggestions and nothing else."""
 
     reflection_chunks = []
     for i in range(len(source_text_chunks)):
         # Will translate chunk i
-        tagged_text = (
-            "".join(source_text_chunks[0:i])
-            + "<TRANSLATE_THIS>"
-            + source_text_chunks[i]
-            + "</TRANSLATE_THIS>"
-            + "".join(source_text_chunks[i + 1 :])
+        # tagged_text = (
+        #     "".join(source_text_chunks[0:i])
+        #     + "<TRANSLATE_THIS>"
+        #     + source_text_chunks[i]
+        #     + "</TRANSLATE_THIS>"
+        #     + "".join(source_text_chunks[i + 1 :])
+        # )
+        prompt = reflection_prompt.format(
+            source_lang=source_lang,
+            target_lang=target_lang,
+            prev=source_text_chunks[i - 1] if i > 0 else "",
+            next=source_text_chunks[i + 1] if i < len(source_text_chunks) - 1 else "",
+            translate_this=source_text_chunks[i],
+            translation=translation_1_chunks[i],
+            country_prompt=country_prompt,
         )
-        if country != "":
-            prompt = reflection_prompt.format(
-                source_lang=source_lang,
-                target_lang=target_lang,
-                tagged_text=tagged_text,
-                chunk_to_translate=source_text_chunks[i],
-                translation_1_chunk=translation_1_chunks[i],
-                country=country,
-            )
-        else:
-            prompt = reflection_prompt.format(
-                source_lang=source_lang,
-                target_lang=target_lang,
-                tagged_text=tagged_text,
-                chunk_to_translate=source_text_chunks[i],
-                translation_1_chunk=translation_1_chunks[i],
-            )
 
         reflection = get_completion(prompt, system_message=system_message)
         reflection_chunks.append(reflection)
@@ -455,76 +407,55 @@ def multichunk_improve_translation(
     reflection_chunks: List[str],
 ) -> List[str]:
     """
-    Improves the translation of a text from source language to target language by considering expert suggestions.
+    通过考虑专家建议改进文本从源语言到目标语言的翻译。
 
     Args:
-        source_lang (str): The source language of the text.
-        target_lang (str): The target language for translation.
-        source_text_chunks (List[str]): The source text divided into chunks.
-        translation_1_chunks (List[str]): The initial translation of each chunk.
-        reflection_chunks (List[str]): Expert suggestions for improving each translated chunk.
+        source_lang (str): 文本的源语言。
+        target_lang (str): 翻译的目标语言。
+        source_text_chunks (List[str]): 将源文本划分为块。
+        translation_1_chunks (List[str]): 每个块的初始翻译。
+        reflection_chunks (List[str]): 改进每个翻译块的专家建议。
 
     Returns:
-        List[str]: The improved translation of each chunk.
+        List[str]: 每个块的改进翻译。
     """
 
-    system_message = f"You are an expert linguist, specializing in translation editing from {source_lang} to {target_lang}."
+    system_message = f"你是语言专家，从事{source_lang}到{target_lang}的翻译和编辑工作。"
 
-    improvement_prompt = """Your task is to carefully read, then improve, a translation from {source_lang} to {target_lang}, taking into
-account a set of expert suggestions and constructive criticisms. Below, the source text, initial translation, and expert suggestions are provided.
+    improvement_prompt = """你的任务是仔细阅读原文本、初始翻译和语言学专家家建议，充分考虑语言学专家家建议，然后重新编辑初始翻译，输出最终翻译。
 
-The source text is below, delimited by XML tags <SOURCE_TEXT> and </SOURCE_TEXT>, and the part that has been translated
-is delimited by <TRANSLATE_THIS> and </TRANSLATE_THIS> within the source text. You can use the rest of the source text
-as context, but need to provide a translation only of the part indicated by <TRANSLATE_THIS> and </TRANSLATE_THIS>.
+我会给你提供五段文本，分别由XML标记<PREV></PREV>、<TRANSLATE_THIS></TRANSLATE_THIS>、<NEXT></NEXT>、<TRANSLATION></TRANSLATION>、<EXPERT_SUGGESTIONS></EXPERT_SUGGESTIONS>包裹，<TRANSLATE_THIS></TRANSLATE_THIS>包裹的是要翻译的文本，<TRANSLATION></TRANSLATION>包裹的是翻译后的文本，<PREV></PREV>包裹的是原文的前文，<NEXT></NEXT>包裹的是原文的后文,<EXPERT_SUGGESTIONS></EXPERT_SUGGESTIONS>包裹的是语言学专家建议。
 
-<SOURCE_TEXT>
-{tagged_text}
-</SOURCE_TEXT>
+内容如下：
+<PREV>{prev}</PREV>
+<TRANSLATE_THIS>{translate_this}</TRANSLATE_THIS>
+<NEXT>{next}</NEXT>
 
-To reiterate, only part of the text is being translated, shown here again between <TRANSLATE_THIS> and </TRANSLATE_THIS>:
-<TRANSLATE_THIS>
-{chunk_to_translate}
-</TRANSLATE_THIS>
 
-The translation of the indicated part, delimited below by <TRANSLATION> and </TRANSLATION>, is as follows:
-<TRANSLATION>
-{translation_1_chunk}
-</TRANSLATION>
+<TRANSLATION>{translation}</TRANSLATION>
+<EXPERT_SUGGESTIONS>{expert_suggestions}</EXPERT_SUGGESTIONS>
 
-The expert translations of the indicated part, delimited below by <EXPERT_SUGGESTIONS> and </EXPERT_SUGGESTIONS>, is as follows:
-<EXPERT_SUGGESTIONS>
-{reflection_chunk}
-</EXPERT_SUGGESTIONS>
-
-Taking into account the expert suggestions rewrite the translation to improve it, paying attention
-to whether there are ways to improve the translation's
-
-(i) accuracy (by correcting errors of addition, mistranslation, omission, or untranslated text),
-(ii) fluency (by applying {target_lang} grammar, spelling and punctuation rules and ensuring there are no unnecessary repetitions), \
-(iii) style (by ensuring the translations reflect the style of the source text)
-(iv) terminology (inappropriate for context, inconsistent use), or
-(v) other errors.
-
-Output only the new translation of the indicated part and nothing else."""
+只输出新翻译，没有其他内容。"""
 
     translation_2_chunks = []
     for i in range(len(source_text_chunks)):
         # Will translate chunk i
-        tagged_text = (
-            "".join(source_text_chunks[0:i])
-            + "<TRANSLATE_THIS>"
-            + source_text_chunks[i]
-            + "</TRANSLATE_THIS>"
-            + "".join(source_text_chunks[i + 1 :])
-        )
+        # tagged_text = (
+        #     "".join(source_text_chunks[0:i])
+        #     + "<TRANSLATE_THIS>"
+        #     + source_text_chunks[i]
+        #     + "</TRANSLATE_THIS>"
+        #     + "".join(source_text_chunks[i + 1 :])
+        # )
 
         prompt = improvement_prompt.format(
             source_lang=source_lang,
             target_lang=target_lang,
-            tagged_text=tagged_text,
-            chunk_to_translate=source_text_chunks[i],
-            translation_1_chunk=translation_1_chunks[i],
-            reflection_chunk=reflection_chunks[i],
+            prev=source_text_chunks[i - 1] if i > 0 else "",
+            next=source_text_chunks[i + 1] if i < len(source_text_chunks) - 1 else "",
+            translate_this=source_text_chunks[i],
+            translation=translation_1_chunks[i],
+            expert_suggestions=reflection_chunks[i]
         )
 
         translation_2 = get_completion(prompt, system_message=system_message)
@@ -637,7 +568,7 @@ def translate(
         return final_translation
 
     else:
-        ic("Translating text as multiple chunks")
+        ic("将文本翻译为多个块")
 
         token_size = calculate_chunk_size(
             token_count=num_tokens_in_text, token_limit=max_tokens
@@ -646,13 +577,13 @@ def translate(
         ic(token_size)
 
         text_splitter = RecursiveCharacterTextSplitter.from_tiktoken_encoder(
-            model_name="deepseek-chat",
+            model_name="gpt-3.5-turbo",
             chunk_size=token_size,
             chunk_overlap=0,
         )
-
+        ic(text_splitter)
         source_text_chunks = text_splitter.split_text(source_text)
-
+        ic("^".join(source_text_chunks))
         translation_2_chunks = multichunk_translation(
             source_lang, target_lang, source_text_chunks, country
         )

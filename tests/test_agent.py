@@ -24,7 +24,7 @@ def test_get_completion_json_mode_api_call():
     # Set up the test data
     prompt = "What is the capital of France in json?"
     system_message = "You are a helpful assistant."
-    model = "deepseek-chat"
+    model = "gpt-3.5-turbo"
     temperature = 0.3
     json_mode = True
 
@@ -44,7 +44,7 @@ def test_get_completion_non_json_mode_api_call():
     # Set up the test data
     prompt = "What is the capital of France?"
     system_message = "You are a helpful assistant."
-    model = "deepseek-chat"
+    model = "gpt-3.5-turbo"
     temperature = 0.3
     json_mode = False
 
